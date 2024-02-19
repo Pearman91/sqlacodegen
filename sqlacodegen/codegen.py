@@ -6,7 +6,7 @@ import re
 import sys
 from collections import defaultdict
 from importlib import import_module
-from inspect import ArgSpec
+# from inspect import ArgSpec
 from keyword import iskeyword
 
 import sqlalchemy
@@ -478,25 +478,47 @@ class CodeGenerator(object):
     def _getargspec_init(method):
         try:
             if hasattr(inspect, 'getfullargspec'):
-                return inspect.getfullargspec(method)
+                fullargspec = inspect.getfullargspec(method)
+                return {
+                    'args': fullargspec.args,
+                    'varargs': fullargspec.varargs,
+                    'varkw': fullargspec.varkw,
+                    'defaults': fullargspec.defaults
+                }
             else:
-                return inspect.getargspec(method)
+                argspec = inspect.getargspec(method)
+                return {
+                    'args': argspec.args,
+                    'varargs': argspec.varargs,
+                    'varkw': argspec.varkw,
+                    'defaults': argspec.defaults
+                }
         except TypeError:
             if method is object.__init__:
-                return ArgSpec(['self'], None, None, None)
+                return {
+                    'args': ['self'],
+                    'varargs': None,
+                    'varkw': None,
+                    'defaults': None
+                }
             else:
-                return ArgSpec(['self'], 'args', 'kwargs', None)
+                return {
+                    'args': ['self'],
+                    'varargs': 'args',
+                    'varkw': 'kwargs',
+                    'defaults': None
+                }
 
     @classmethod
     def render_column_type(cls, coltype):
         args = []
         kwargs = OrderedDict()
         argspec = cls._getargspec_init(coltype.__class__.__init__)
-        defaults = dict(zip(argspec.args[-len(argspec.defaults or ()):],
-                            argspec.defaults or ()))
+        defaults = dict(zip(argspec['args'][-len(argspec['defaults'] or ()):],
+                            argspec['defaults'] or ()))
         missing = object()
         use_kwargs = False
-        for attr in argspec.args[1:]:
+        for attr in argspec['args'][1:]:
             # Remove annoyances like _warn_on_bytestring
             if attr.startswith('_'):
                 continue
@@ -510,8 +532,8 @@ class CodeGenerator(object):
             else:
                 args.append(repr(value))
 
-        if argspec.varargs and hasattr(coltype, argspec.varargs):
-            varargs_repr = [repr(arg) for arg in getattr(coltype, argspec.varargs)]
+        if argspec['varargs'] and hasattr(coltype, argspec['varargs']):
+            varargs_repr = [repr(arg) for arg in getattr(coltype, argspec['varargs'])]
             args.extend(varargs_repr)
 
         if isinstance(coltype, Enum) and coltype.name is not None:
